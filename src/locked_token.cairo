@@ -11,7 +11,7 @@ pub mod LockedToken {
     use starknet_token_distributor::interface::{
         IERC20, IERC20CamelOnly, ERC20ABIDispatcher, ERC20ABIDispatcherTrait, TDAdmin, TDUser,
     };
-
+    use starknet_token_distributor::errors::Errors;
     use starknet::{ContractAddress, EthAddress};
     use starknet::{get_caller_address, get_block_timestamp, get_contract_address, get_tx_info};
     use core::traits::{Default, Into, TryInto};
@@ -105,13 +105,12 @@ pub mod LockedToken {
         new_address: ContractAddress
     }
 
-
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, oracle_public_key: felt252) {
         self.initializer('Locked Proj Token', 'wPROJ');
-        assert(!owner.is_zero(), 'TD: Owner is 0');
+        assert(!owner.is_zero(), Errors::OWNER_ZERO);
         self._owner.write(owner);
-        assert(oracle_public_key != 0, 'TD: Oracle pubkey is 0');
+        assert(oracle_public_key != 0, Errors::ORACLE_PUBKEY_ZERO);
         self._oracle_public_key.write(oracle_public_key);
     }
 
@@ -150,7 +149,7 @@ pub mod LockedToken {
         // This ERC20 represents a locked token and hence transfer, trasnfer_from and approve are not required
         // The function definitions are kept here to conform to ERC20 impl
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
-            assert(true == false, 'TD: Invalid call');
+            assert(true == false, Errors::INVALID_CALL);
             false
         }
 
@@ -160,12 +159,12 @@ pub mod LockedToken {
             recipient: ContractAddress,
             amount: u256
         ) -> bool {
-            assert(true == false, 'TD: Invalid call');
+            assert(true == false, Errors::INVALID_CALL);
             false
         }
 
         fn approve(ref self: ContractState, spender: ContractAddress, amount: u256) -> bool {
-            assert(true == false, 'TD: Invalid call');
+            assert(true == false, Errors::INVALID_CALL);
             false
         }
     }
@@ -187,7 +186,7 @@ pub mod LockedToken {
             recipient: ContractAddress,
             amount: u256
         ) -> bool {
-            assert(true == false, 'TD: Invalid call');
+            assert(true == false, Errors::INVALID_CALL);
             false
         }
     }
@@ -198,7 +197,7 @@ pub mod LockedToken {
         fn set_claim_start_time(ref self: ContractState, time: u64) {
             self._assert_owner();
             let current_time = get_block_timestamp();
-            assert(time >= current_time, 'TD: Start time already passed');
+            assert(time >= current_time, Errors::START_TIME_PASSED);
             let prev_time = self._claim_start.read();
             self._claim_start.write(time);
             self
@@ -224,7 +223,7 @@ pub mod LockedToken {
         fn set_swap_start_time(ref self: ContractState, time: u64) {
             self._assert_owner();
             let current_time = get_block_timestamp();
-            assert(time >= current_time, 'TD: Start time already passed');
+            assert(time >= current_time, Errors::START_TIME_PASSED);
             let prev_time = self._swap_start.read();
             self._swap_start.write(time);
             self
@@ -249,7 +248,7 @@ pub mod LockedToken {
         // @dev - Owner only function to update owner address
         fn update_owner_address(ref self: ContractState, new_owner: ContractAddress) {
             self._assert_owner();
-            assert(!new_owner.is_zero(), 'TD: Owner is 0');
+            assert(!new_owner.is_zero(), Errors::OWNER_ZERO);
             self._owner.write(new_owner);
         }
 
@@ -257,20 +256,20 @@ pub mod LockedToken {
         // This public key is used to verify claim signatures
         fn update_oracle_public_key(ref self: ContractState, new_key: felt252) {
             self._assert_owner();
-            assert(new_key != 0, 'TD: Public key is 0');
+            assert(new_key != 0, Errors::PUBKEY_ZERO);
             self._oracle_public_key.write(new_key);
         }
 
         // @dev - Owner only function to enable owner to withdraw unclaimed tokens
         fn withdraw_unclaimed_tokens(ref self: ContractState, recipient: ContractAddress) {
             self._assert_owner();
-            assert(!recipient.is_zero(), 'TD: Recipient is 0');
+            assert(!recipient.is_zero(), Errors::RECIPIENT_ZERO);
 
             // can withdraw only after claim duration is over
             let current_time = get_block_timestamp();
             assert(
                 current_time >= self._claim_start.read() + self._claim_duration.read(),
-                'TD: Claim period not over'
+                Errors::CLAIM_PERIOD_NOT_OVER
             );
 
             let token_address = self._proj_token_address.read();
@@ -293,7 +292,7 @@ pub mod LockedToken {
         // @dev - Onwer only function to transfer the unswapped Proj tokens
         fn withdraw_unswapped_tokens(ref self: ContractState, recipient: ContractAddress) {
             self._assert_owner();
-            assert(!recipient.is_zero(), 'TD: Recipient is 0');
+            assert(!recipient.is_zero(), Errors::RECIPIENT_ZERO);
 
             // can withdraw only after swap tiem is over
             let current_time = get_block_timestamp();
@@ -500,9 +499,6 @@ pub mod LockedToken {
         }
 
         // @dev - Function to form hash of message
-        // hash = pedersen_hash(0, l1_address, l2_address, amount, chain_id, 5) - amount is 2 felts
-        // we use this hash since compute_hash_on_elements(data) is calculated as
-        // h(h(h(h(0, data[0]), data[1]), ...), data[n-1]), n)
         fn _hash_args(
             self: @ContractState, l1_address: EthAddress, l2_address: ContractAddress, amount: u256
         ) -> felt252 {
